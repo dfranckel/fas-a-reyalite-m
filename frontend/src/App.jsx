@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AssessmentForm from './components/AssessmentForm';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,37 +8,31 @@ import { generateUniqueCode } from './services/localCodeService';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://fas-a-reyalite-m.onrender.com';
 
-const TRAIT_CONFIG = [
-  { key: 'O', labelFr: "Ouverture d'esprit", labelHt: "Louvri lespri", color: 'bg-blue-500' },
-  { key: 'C', labelFr: "Conscience / Rigueur", labelHt: "Konsyans / Rigè", color: 'bg-emerald-500' },
-  { key: 'E', labelFr: "Extraversion", labelHt: "Ekstravèsyon", color: 'bg-amber-500' },
-  { key: 'A', labelFr: "Agréabilité", labelHt: "Agrabilite", color: 'bg-teal-500' },
-  { key: 'N', labelFr: "Névrosisme / Instabilité", labelHt: "Neevrotis / Enstabilite", color: 'bg-rose-500' }
-];
-
-const LIKERT_OPTIONS = [
-  { labelFr: "Pas du tout d'accord", labelHt: "Pa dako ditou", val: 1 },
-  { labelFr: "Plutôt pas d'accord", labelHt: "Plis pase pa dako", val: 2 },
-  { labelFr: "Neutre", labelHt: "Nèg / Pa deside", val: 3 },
-  { labelFr: "Plutôt d'accord", labelHt: "Plis pase dako", val: 4 },
-  { labelFr: "Tout à fait d'accord", labelHt: "Dako tèt chaje", val: 5 }
-];
-
 export default function App() {
   const [lang, setLang] = useState('fr');
   const [accessCode, setAccessCode] = useState('');
 
-React.useEffect(() => {
-  // Lè moun nan ouvri sit la, nou kreye yon kòd inik pou li si l poko genyen
-  const existingSession = localStorage.getItem('fas_active_session');
-  if (existingSession) {
-    const parsed = JSON.parse(existingSession);
-    setAccessCode(parsed.code);
-  } else {
+  useEffect(() => {
+    // 1. Nou tcheke si gen yon sesyon ki te deja sove
+    const existingSession = localStorage.getItem('fas_active_session');
+    
+    if (existingSession) {
+      try {
+        const parsed = JSON.parse(existingSession);
+        // Si sesyon an egziste E li pa BF-TEST-2026, nou pran l
+        if (parsed.code && !parsed.code.includes('BF-TEST')) {
+          setAccessCode(parsed.code);
+          return;
+        }
+      } catch (e) {
+        console.error("Erè nan parsing sesyon an", e);
+      }
+    }
+
+    // 2. Si pa gen sesyon valab oswa li te gen ansyen kòd fiks la, nou jenere yon nouvo kòd inik FAS-XXXX-XXXX
     const newCode = generateUniqueCode();
     setAccessCode(newCode);
-  }
-}, []);
+  }, []);
   const [step, setStep] = useState('welcome'); // welcome, quiz, clinical_questions, paywall, loading, result, crisis
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeQuestions, setActiveQuestions] = useState([]);

@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { calculateBigFiveScores, getRandom30Questions } from './scoreCalculator';
 import { questionsData } from './questions.js';
+import { generateUniqueCode } from './services/localCodeService';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://fas-a-reyalite-m.onrender.com';
 
@@ -25,7 +26,19 @@ const LIKERT_OPTIONS = [
 
 export default function App() {
   const [lang, setLang] = useState('fr');
-  const [accessCode, setAccessCode] = useState('BF-TEST-2026');
+  const [accessCode, setAccessCode] = useState('');
+
+React.useEffect(() => {
+  // Lè moun nan ouvri sit la, nou kreye yon kòd inik pou li si l poko genyen
+  const existingSession = localStorage.getItem('fas_active_session');
+  if (existingSession) {
+    const parsed = JSON.parse(existingSession);
+    setAccessCode(parsed.code);
+  } else {
+    const newCode = generateUniqueCode();
+    setAccessCode(newCode);
+  }
+}, []);
   const [step, setStep] = useState('welcome'); // welcome, quiz, clinical_questions, paywall, loading, result, crisis
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeQuestions, setActiveQuestions] = useState([]);

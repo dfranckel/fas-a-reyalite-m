@@ -5,3 +5,4 @@ python-dotenv
 flask-cors
 requests
 flask-limiter
+VITE_API_BASE_URL=https://fas-a-reyalite-m.onrender.com

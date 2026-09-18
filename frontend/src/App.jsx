@@ -5,6 +5,8 @@ import remarkGfm from 'remark-gfm';
 import { calculateBigFiveScores, getRandom30Questions } from './scoreCalculator';
 import { questionsData } from './questions.js';
 
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://fas-a-reyalite-m.onrender.com';
+
 const TRAIT_CONFIG = [
   { key: 'O', labelFr: "Ouverture d'esprit", labelHt: "Louvri lespri", color: 'bg-blue-500' },
   { key: 'C', labelFr: "Conscience / Rigueur", labelHt: "Konsyans / Rigè", color: 'bg-emerald-500' },
@@ -93,9 +95,10 @@ export default function App() {
     const safePinCode = typeof pinCode !== 'undefined' ? pinCode : '';
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/generate-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+  const response = await fetch(`${API_URL}/api/generate-report`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  
         body: JSON.stringify({
           access_code: safeAccessCode,
           pin: safePinCode, // Voye PIN an san l pa fè ReferenceError

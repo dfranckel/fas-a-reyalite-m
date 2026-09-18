@@ -8,6 +8,18 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 load_dotenv(override=True)
+
+# 1. Inisyalize aplikasyon Flask la premye
+app = Flask(__name__)
+
+# 2. Konfigirasyon CORS
+CORS(app, resources={r"/*": {"origins": [
+    "https://fas-a-reyalite-m.onrender.com",
+    "http://localhost:5173",  # Pou devlopman lokal
+    "http://localhost:3000"   # Si w sèvi ak React standard port
+]}})
+
+load_dotenv(override=True)
 # Mappings des libellés pour le prompt clinique (à placer au niveau global dans app.py)
 DURATION_LABELS = {
     "less_than_1_month": "Moins d'un mois (Aigu)",
@@ -52,10 +64,7 @@ SLEEP_LABELS = {
     "insomnia": "Insomnies / Difficultés à s'endormir"
 }
 
-app = Flask(__name__)
 
-# Autorise les appels CORS
-CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Limiteur de requêtes par IP
 limiter = Limiter(

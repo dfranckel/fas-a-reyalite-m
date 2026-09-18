@@ -242,6 +242,8 @@ def generate_report():
     soc_str = SOCIAL_NETWORK_LABELS.get(clinical_context.get('social_network_quality'), 'Non renseigné')
     work_str = WORK_LABELS.get(clinical_context.get('work_satisfaction'), 'Non renseigné')
     sleep_str = SLEEP_LABELS.get(clinical_context.get('sleep'), 'Non renseigné')
+    unfulfilled = clinical_context.get('unfulfilled_desires', '').strip() or "Aucune précision apportée"
+    disappointments = clinical_context.get('major_disappointments', '').strip() or "Aucune précision apportée"
 
     anhedonia_val = clinical_context.get('anhedonia')
     anhedonia_str = "Perte d'intérêt / plaisir (Anhédonie déclarée)" if anhedonia_val is True else "Plaisir conservé dans les loisirs"

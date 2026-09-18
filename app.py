@@ -12,12 +12,17 @@ load_dotenv(override=True)
 # 1. Inisyalize aplikasyon Flask la premye
 app = Flask(__name__)
 
-# 2. Konfigirasyon CORS
-CORS(app, resources={r"/*": {"origins": [
-    "https://fas-a-reyalite-m.onrender.com",
-    "http://localhost:5173",  # Pou devlopman lokal
-    "http://localhost:3000"   # Si w sèvi ak React standard port
-]}})
+# Konfigirasyon CORS pou otorize frontend la ak devlopman lokal
+CORS(app, resources={r"/*": {
+    "origins": [
+        "https://fas-a-reyalite-m-frontend.onrender.com",
+        "https://fas-a-reyalite-m.onrender.com",
+        "http://localhost:5173",
+        "http://localhost:3000"
+    ],
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
 
 load_dotenv(override=True)
 # Mappings des libellés pour le prompt clinique (à placer au niveau global dans app.py)

@@ -151,10 +151,12 @@ export default function App() {
         return;
       }
 
-      if (data.report) {
-        setReportText(data.report);
-        setStep('result');
-      }
+    if (data.report) {
+    setReportText(data.report);
+    // Efase kòd ki te sèvi a nan localStorage
+    localStorage.removeItem('fas_active_session');
+    setStep('result');
+  }
 
     } catch (error) {
       console.error("Backend error:", error);
@@ -173,9 +175,15 @@ export default function App() {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  const handleReset = () => {
-    setAccessCode('');
-    if (typeof setPinCode === 'function') setPinCode(''); // Efase PIN an tou lè w ap fè reset
+const handleReset = () => {
+    // EFASE SESYON AN NAN LOCALSTORAGE POU YON NOUVO KÒD KA JENERE!
+    localStorage.removeItem('fas_active_session');
+
+    // Jenere yon nouvo kòd inik pou pwochen moun nan
+    const newCode = generateUniqueCode();
+    setAccessCode(newCode);
+
+    if (typeof setPinCode === 'function') setPinCode('');
     setUserComment('');
     setErrorMessage(null);
     setCrisisData(null);

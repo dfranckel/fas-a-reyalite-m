@@ -141,13 +141,20 @@ export default function App() {
     }
   };
 
-  // Fonksyon pou bouton "Générer mon rapport" an
 const handleVerifyAndGenerate = async () => {
+  // On récupère la valeur actuelle du code et du PIN
   const safeAccessCode = (accessCode || '').trim();
   const safePinCode = (pinCode || '').trim();
 
+  console.log("--> Envoi vers le backend - Code:", safeAccessCode, "PIN:", safePinCode);
+
   if (!safeAccessCode) {
     alert(lang === 'fr' ? "Veuillez entrer le code d'accès." : "Tanpri antre kòd daksè a.");
+    return;
+  }
+
+  if (!safePinCode) {
+    alert(lang === 'fr' ? "Veuillez entrer le code PIN." : "Tanpri antre kòd PIN la.");
     return;
   }
 
@@ -160,8 +167,10 @@ const handleVerifyAndGenerate = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input_code: safeAccessCode, 
-        input_pin: safePinCode,
+        access_code: safeAccessCode, // Clé attendue par app.py
+        code: safeAccessCode,        // Sécurité au cas où
+        pin: safePinCode,            // Clé attendue par app.py
+        input_pin: safePinCode,      // Sécurité au cas où
         scores: scores,
         clinical_context: {
           ...clinicalContext,
@@ -184,7 +193,7 @@ const handleVerifyAndGenerate = async () => {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || data.message || (lang === 'fr' ? "Code d'accès invalide." : "Kòd daksè a pa bon."));
+      throw new Error(data.error || data.message || (lang === 'fr' ? "Code d'accès ou PIN invalide." : "Kòd daksè a oubyen PIN an pa bon."));
     }
 
     if (data.crisis) {

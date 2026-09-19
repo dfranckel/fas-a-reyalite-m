@@ -196,6 +196,7 @@ def generate_report():
     if not access_code:
         return jsonify({"error": "Code d'accès manquant."}), 400
 
+   # Nan app.py (nan wout /api/generate-report)
     if access_code == ADMIN_CODE:
         print("--> Aksè kòm Admin konfime")
     else:
@@ -205,10 +206,9 @@ def generate_report():
         if not input_pin:
             return jsonify({"error": "PIN de confirmation manquant."}), 400
 
-        expected_pin = calculate_expected_pin(access_code)
-        if input_pin != expected_pin:
+        # Tcheke si PIN an korèk matematikman dapre kòd inik itilizatè a voye a
+        if not verify_user_pin(access_code, input_pin):
             return jsonify({"error": "PIN de confirmation invalide."}), 403
-
     # 2. Extraction des données
     scores = data.get('scores')
     clinical_context = data.get('clinical_context', {})

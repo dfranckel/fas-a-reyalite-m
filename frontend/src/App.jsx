@@ -13,7 +13,6 @@ export default function App() {
   const [accessCode, setAccessCode] = useState('');
 
  useEffect(() => {
-  // Tcheke si gen yon sesyon ki te la deja
   const existingSession = localStorage.getItem('fas_active_session');
   if (existingSession) {
     try {
@@ -26,10 +25,10 @@ export default function App() {
       console.error(e);
     }
   }
-
-  // Si pa genyen, jenere yon kòd inik otomatikman kounye a
-  const newCode = generateUniqueCode();
+  // Remplacez generateUniqueCode() par ceci :
+  const newCode = crypto.randomUUID().split('-')[0].toUpperCase();
   setAccessCode(newCode);
+  localStorage.setItem('fas_active_session', JSON.stringify({ code: newCode }));
 }, []);
   const [step, setStep] = useState('welcome'); // welcome, quiz, clinical_questions, paywall, loading, result, crisis
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -88,100 +87,123 @@ export default function App() {
     }
   };
 
- const sendResultsToBackend = async () => {
-    setStep('loading');
-    setErrorMessage(null);
-    const handleVerifyAndGenerate = async () => {
-    // 1. Tcheke si gen kòd ak PIN
-    if (!accessCode) {
-      alert(lang === 'fr' ? "Code d'accès introuvable." : "Kòd daksè a pa jwenn.");
+// Fonksyon pou voye done epi verifye kòd la ak sèvè Flask la
+  const sendResultsToBackend = async () => {
+    // Netwaye epi prepare kòd ak PIN
+    const safeAccessCode = (accessCode || '').trim();
+    const safePinCode = (pinCode || '').trim();
+
+    // 1. Validate anvan n voye
+    if (!safeAccessCode) {
+      alert(lang === 'fr' ? "Veuillez entrer le code d'accès." : "Tanpri antre kòd daksè a.");
       return;
     }
 
-    if (!pinCode) {
-      alert(lang === 'fr' ? "Veuillez entrer le code PIN reçu." : "Tanpri antre kòd PIN ou resevwa a.");
-      return;
-    }
-
-    // 2. Rele fonksyon ki voye done yo bay Flask la
-    await sendResultsToBackend();
-  };
-
-    const scores = calculateBigFiveScores(activeQuestions, userAnswers);
-    setCalculatedScores(scores);
-
-    // Sekirite pou si pinCode oswa accessCode pa anrejistre anndan state yo
-    const safeAccessCode = typeof accessCode !== 'undefined' ? accessCode : '';
-    const safePinCode = typeof pinCode !== 'undefined' ? pinCode : '';
+    setBackendLoading(true);
+    setBackendError(null);
 
     try {
-  const response = await fetch(`${API_URL}/api/generate-report`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  
+      // 2. Voye presizeman non kle Flask ap tann yo (input_code ak input_pin)
+      const response = await fetch(`${BACKEND_URL}/api/generate-report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          access_code: safeAccessCode,
-         input_pin: safePinCode, // <--- Mete "input_pin" la kòm kle!
-          scores,
+          input_code: safeAccessCode, // <-- Flask ap tann input_code!
+          input_pin: safePinCode,   // <-- Flask ap tann input_pin!
+          scores: scores,
           clinical_context: {
             ...clinicalContext,
             baseline_period: '2_to_3_years'
           },
           type: 'bfi_30',
-          lang
-        })
+          lang: lang
+        }),
       });
-
-      if (response.status === 429) {
-        setErrorMessage(
-          lang === 'fr'
-            ? "Limite quotidienne de tests atteinte (3/3). Réessayez demain."
-            : "Ou rive nan limit tès ou pou jodi a (3/3)."
-        );
-        setStep('paywall');
-        return;
-      }
-
-      if (!response.ok) {
-        // Rekiperasyon mesaj erè presi ki soti nan backend Flask la si l egziste
-        const errorData = await response.json().catch(() => ({}));
-        const serverMsg = errorData.error || errorData.message;
-
-        setErrorMessage(
-          serverMsg 
-            ? serverMsg 
-            : (lang === 'fr' ? `Erreur serveur (${response.status}).` : `Erè nan sèvè a (${response.status}).`)
-        );
-        setStep('paywall');
-        return;
-      }
 
       const data = await response.json();
 
-      if (data.crisis) {
-        setCrisisData(data);
-        setStep('crisis');
-        return;
+      if (!response.ok) {
+        // Si gen yon erè nan kòd la oswa PIN nan, afiche mesaj erè sèvè a bay
+        throw new Error(data.error || (lang === 'fr' ? "Code d'accès invalide." : "Kòd daksè a pa bon."));
       }
 
-    if (data.report) {
-    setReportText(data.report);
-    // Efase kòd ki te sèvi a nan localStorage
-    localStorage.removeItem('fas_active_session');
-    setStep('result');
-  }
-
-    } catch (error) {
-      console.error("Backend error:", error);
-      setErrorMessage(
-        lang === 'fr' 
-          ? "Erreur de connexion au serveur backend." 
-          : "Erè nan rekiperasyon rapò a."
-      );
-      setStep('paywall');
+      // Si tout bagay OK, sove rapò a epi lage rezilta yo!
+      setBackendReport(data.report || data);
+      setIsUnlocked(true); // <--- Sa ap debloke rezilta a pou moun lan ka wè l
+    } catch (err) {
+      console.error("Erè backend:", err);
+      setBackendError(err.message);
+      alert(err.message);
+    } finally {
+      setBackendLoading(false);
     }
   };
 
+  // Fonksyon pou bouton "Générer mon rapport" an
+const handleVerifyAndGenerate = async () => {
+  const safeAccessCode = (accessCode || '').trim();
+  const safePinCode = (pinCode || '').trim();
+
+  if (!safeAccessCode) {
+    alert(lang === 'fr' ? "Veuillez entrer le code d'accès." : "Tanpri antre kòd daksè a.");
+    return;
+  }
+
+  setErrorMessage(null);
+  const scores = calculateBigFiveScores(activeQuestions, userAnswers);
+  setCalculatedScores(scores);
+
+  try {
+    const response = await fetch(`${API_URL}/api/generate-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input_code: safeAccessCode, 
+        input_pin: safePinCode,
+        scores: scores,
+        clinical_context: {
+          ...clinicalContext,
+          baseline_period: '2_to_3_years'
+        },
+        type: 'bfi_30',
+        lang: lang
+      })
+    });
+
+    if (response.status === 429) {
+      setErrorMessage(
+        lang === 'fr'
+          ? "Limite quotidienne de tests atteinte (3/3). Réessayez demain."
+          : "Ou rive nan limit tès ou pou jodi a (3/3)."
+      );
+      return;
+    }
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || data.message || (lang === 'fr' ? "Code d'accès invalide." : "Kòd daksè a pa bon."));
+    }
+
+    if (data.crisis) {
+      setCrisisData(data);
+      setStep('crisis');
+      return;
+    }
+
+    if (data.report) {
+      setReportText(data.report);
+      localStorage.removeItem('fas_active_session');
+      setStep('result');
+    }
+
+  } catch (error) {
+    console.error("Backend error:", error);
+    setErrorMessage(error.message || (lang === 'fr' ? "Erreur de connexion." : "Erè nan rekiperasyon rapò a."));
+  }
+};
   const handleCopyReport = () => {
     navigator.clipboard.writeText(reportText);
     setCopied(true);
@@ -193,8 +215,8 @@ const handleReset = () => {
     localStorage.removeItem('fas_active_session');
 
     // Jenere yon nouvo kòd inik pou pwochen moun nan
-    const newCode = generateUniqueCode();
-    setAccessCode(newCode);
+   const newCode = crypto.randomUUID().split('-')[0].toUpperCase();
+setAccessCode(newCode);
 
     if (typeof setPinCode === 'function') setPinCode('');
     setUserComment('');
@@ -889,6 +911,40 @@ const handleReset = () => {
             </button>
           </div>
         )}
+      {/* Si kòd la poko debloke (isUnlocked === false), afiche Paywall la */}
+{!isUnlocked ? (
+  <div className="paywall-container">
+    <p className="text-red-500 font-bold">{backendError}</p>
+    
+    <input 
+      type="text" 
+      placeholder="Code d'accès" 
+      value={accessCode} 
+      onChange={(e) => setAccessCode(e.target.value)} 
+    />
+    
+    <input 
+      type="text" 
+      placeholder="Code PIN (si requis)" 
+      value={pinCode} 
+      onChange={(e) => setPinCode(e.target.value)} 
+    />
+
+    <button 
+      onClick={handleVerifyAndGenerate}
+      disabled={backendLoading}
+      className="bg-blue-600 text-white px-4 py-2 rounded mt-2"
+    >
+      {backendLoading ? "Vérification..." : "Générer mon rapport"}
+    </button>
+  </div>
+) : (
+  /* Lè kòd la bon epi isUnlocked === true, se lè sa a pou l afiche rezilta yo ak rapò a */
+  <div className="results-container">
+    <h2>Votre Rapport Clinique Complexe</h2>
+    <div>{backendReport}</div>
+  </div>
+)}
 
       </div>
     </div>

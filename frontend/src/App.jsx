@@ -12,27 +12,25 @@ export default function App() {
   const [lang, setLang] = useState('fr');
   const [accessCode, setAccessCode] = useState('');
 
-  useEffect(() => {
-    // 1. Nou tcheke si gen yon sesyon ki te deja sove
-    const existingSession = localStorage.getItem('fas_active_session');
-    
-    if (existingSession) {
-      try {
-        const parsed = JSON.parse(existingSession);
-        // Si sesyon an egziste E li pa BF-TEST-2026, nou pran l
-        if (parsed.code && !parsed.code.includes('BF-TEST')) {
-          setAccessCode(parsed.code);
-          return;
-        }
-      } catch (e) {
-        console.error("Erè nan parsing sesyon an", e);
+ useEffect(() => {
+  // Tcheke si gen yon sesyon ki te la deja
+  const existingSession = localStorage.getItem('fas_active_session');
+  if (existingSession) {
+    try {
+      const parsed = JSON.parse(existingSession);
+      if (parsed.code) {
+        setAccessCode(parsed.code);
+        return;
       }
+    } catch (e) {
+      console.error(e);
     }
+  }
 
-    // 2. Si pa gen sesyon valab oswa li te gen ansyen kòd fiks la, nou jenere yon nouvo kòd inik FAS-XXXX-XXXX
-    const newCode = generateUniqueCode();
-    setAccessCode(newCode);
-  }, []);
+  // Si pa genyen, jenere yon kòd inik otomatikman kounye a
+  const newCode = generateUniqueCode();
+  setAccessCode(newCode);
+}, []);
   const [step, setStep] = useState('welcome'); // welcome, quiz, clinical_questions, paywall, loading, result, crisis
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeQuestions, setActiveQuestions] = useState([]);
@@ -93,6 +91,21 @@ export default function App() {
  const sendResultsToBackend = async () => {
     setStep('loading');
     setErrorMessage(null);
+    const handleVerifyAndGenerate = async () => {
+    // 1. Tcheke si gen kòd ak PIN
+    if (!accessCode) {
+      alert(lang === 'fr' ? "Code d'accès introuvable." : "Kòd daksè a pa jwenn.");
+      return;
+    }
+
+    if (!pinCode) {
+      alert(lang === 'fr' ? "Veuillez entrer le code PIN reçu." : "Tanpri antre kòd PIN ou resevwa a.");
+      return;
+    }
+
+    // 2. Rele fonksyon ki voye done yo bay Flask la
+    await sendResultsToBackend();
+  };
 
     const scores = calculateBigFiveScores(activeQuestions, userAnswers);
     setCalculatedScores(scores);
@@ -108,7 +121,7 @@ export default function App() {
   
         body: JSON.stringify({
           access_code: safeAccessCode,
-          pin: safePinCode, // Voye PIN an san l pa fè ReferenceError
+         input_pin: safePinCode, // <--- Mete "input_pin" la kòm kle!
           scores,
           clinical_context: {
             ...clinicalContext,
@@ -662,33 +675,47 @@ const handleReset = () => {
             </div>
 
            <div className="space-y-3">
-              {/* Chan 1: Code d'accès */}
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  {lang === 'fr' ? "Code d'accès" : "Kòd daksè"}
-                </label>
-                <input
-                  type="text"
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
-                  placeholder={lang === 'fr' ? "Ex: BF-X9K2L1" : "Eg: BF-X9K2L1"}
-                  className="w-full bg-slate-800 text-white p-3 rounded-xl border border-indigo-500/50 text-sm font-mono tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
+             {/* Chan 1: Code d'accès (Otomatik & Inik pou aparèy sa a) */}
+<div>
+  <label className="block text-xs font-medium text-slate-400 mb-1">
+    {lang === 'fr' ? "Votre Code d'accès unique" : "Kòd daksè inik ou an"}
+  </label>
+  <div className="flex gap-2">
+    <input
+      type="text"
+      value={accessCode}
+      readOnly
+      className="w-full bg-slate-900 text-indigo-400 p-3 rounded-xl border border-indigo-500/50 text-sm font-mono font-bold tracking-wider uppercase cursor-not-allowed"
+    />
+    <button
+      type="button"
+      onClick={() => navigator.clipboard.writeText(accessCode)}
+      className="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 transition"
+      title={lang === 'fr' ? "Copier le code" : "Kopie kòd la"}
+    >
+      📋
+    </button>
+  </div>
+  <p className="text-[11px] text-slate-400 mt-1">
+    {lang === 'fr' 
+      ? "👉 Envoyez ce code sur WhatsApp pour recevoir votre PIN de confirmation." 
+      : "👉 Voye kòd sa a sou WhatsApp pou w ka resevwa PIN konfimasyon w lan."}
+  </p>
+</div>
 
-              {/* Chan 2: Code PIN */}
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  {lang === 'fr' ? "Code PIN (si requis)" : "Kòd PIN (si l nesesè)"}
-                </label>
-                <input
-                  type="text"
-                  value={typeof pinCode !== 'undefined' ? pinCode : ''}
-                  onChange={(e) => typeof setPinCode === 'function' && setPinCode(e.target.value.toUpperCase())}
-                  placeholder={lang === 'fr' ? "Ex: 8A3F91" : "Eg: 8A3F91"}
-                  className="w-full bg-slate-800 text-white p-3 rounded-xl border border-indigo-500/50 text-sm font-mono tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
+{/* Chan 2: Code PIN (Moun nan ap rantre PIN ou ba li a) */}
+<div className="mt-4">
+  <label className="block text-xs font-medium text-slate-400 mb-1">
+    {lang === 'fr' ? "Code PIN de confirmation" : "Kòd PIN konfimasyon"}
+  </label>
+  <input
+    type="text"
+    value={pinCode}
+    onChange={(e) => setPinCode(e.target.value.toUpperCase())}
+    placeholder={lang === 'fr' ? "Entrez le PIN reçu (Ex: 8A3F91)" : "Antre PIN ou resevwa a (Eg: 8A3F91)"}
+    className="w-full bg-slate-800 text-white p-3 rounded-xl border border-indigo-500/50 text-sm font-mono tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
+  />
+</div>
             </div>
             {errorMessage && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs text-center">
@@ -704,13 +731,25 @@ const handleReset = () => {
               >
                 {lang === 'fr' ? "Retour" : "Retounen"}
               </button>
-              <button
-                type="button"
-                onClick={sendResultsToBackend}
-                className="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition"
-              >
-                {lang === 'fr' ? "Générer mon rapport" : "Jenere rapò m an"}
-              </button>
+             <button
+  type="button"
+  onClick={handleVerifyAndGenerate}
+  disabled={isLoading || !pinCode}
+  className={`w-full py-3.5 rounded-xl text-xs font-bold shadow-lg transition flex items-center justify-center gap-2 ${
+    isLoading || !pinCode
+      ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
+      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+  }`}
+>
+  {isLoading ? (
+    <>
+      <span className="animate-spin">⏳</span>
+      {lang === 'fr' ? "Génération en cours..." : "M ap jenere rapò a..."}
+    </>
+  ) : (
+    lang === 'fr' ? "Générer mon rapport" : "Jenere rapò mwen an"
+  )}
+</button>
             </div>
           </div>
         )}

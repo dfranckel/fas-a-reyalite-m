@@ -4,33 +4,29 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { calculateBigFiveScores, getRandom30Questions } from './scoreCalculator';
 import { questionsData } from './questions.js';
-import { generateUniqueCode } from './services/localCodeService';
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://fas-a-reyalite-m.onrender.com';
+
+const LIKERT_OPTIONS = [
+  { val: 1, labelFr: "Pas du tout d'accord", labelHt: "Pa d'akò menm" },
+  { val: 2, labelFr: "Plutôt pas d'accord", labelHt: "Plito pa d'akò" },
+  { val: 3, labelFr: "Neutre / Incertain", labelHt: "Nèg / Pa gen anpil lide" },
+  { val: 4, labelFr: "Plutôt d'accord", labelHt: "Plito d'akò" },
+  { val: 5, labelFr: "Tout à fait d'accord", labelHt: "D'akò tèt chaje" }
+];
+
+const TRAIT_CONFIG = [
+  { key: 'neuroticism', labelFr: "Névrosisme (Sensibilité émotionnelle)", labelHt: "Nèvroz (Sansibilite emosyonèl)", color: "bg-rose-500" },
+  { key: 'extraversion', labelFr: "Extraversion", labelHt: "Ekstravèzyon", color: "bg-amber-500" },
+  { key: 'openness', labelFr: "Ouverture à l'expérience", labelHt: "Ouvèti sou nouvo eksperyans", color: "bg-emerald-500" },
+  { key: 'agreeableness', labelFr: "Agréabilité", labelHt: "Agréabilite (Sens kominotè)", color: "bg-blue-500" },
+  { key: 'conscientiousness', labelFr: "Caractère consciencieux", labelHt: "Konsyans pwofesyonèl / Rigò", color: "bg-purple-500" }
+];
 
 export default function App() {
   const [lang, setLang] = useState('fr');
   const [accessCode, setAccessCode] = useState('');
-
- useEffect(() => {
-  const existingSession = localStorage.getItem('fas_active_session');
-  if (existingSession) {
-    try {
-      const parsed = JSON.parse(existingSession);
-      if (parsed.code) {
-        setAccessCode(parsed.code);
-        return;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  // Remplacez generateUniqueCode() par ceci :
-  const newCode = crypto.randomUUID().split('-')[0].toUpperCase();
-  setAccessCode(newCode);
-  localStorage.setItem('fas_active_session', JSON.stringify({ code: newCode }));
-}, []);
-  const [step, setStep] = useState('welcome'); // welcome, quiz, clinical_questions, paywall, loading, result, crisis
+  const [step, setStep] = useState('welcome'); // welcome, quiz, clinical_questions, paywall, pin, loading, result, crisis
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeQuestions, setActiveQuestions] = useState([]);
   const [userAnswers, setUserAnswers] = useState({});
@@ -41,6 +37,7 @@ export default function App() {
   const [userComment, setUserComment] = useState('');
   const [copied, setCopied] = useState(false);
   const [pinCode, setPinCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const [clinicalContext, setClinicalContext] = useState({
     duration: '1_to_6_months',
@@ -56,7 +53,7 @@ export default function App() {
     anhedonia: false,
     sources_of_satisfaction: '',
     sources_of_fatigue: '',
-    unfulfilled_desires: '', // Sa l te anvi konble ki pa konble (oubyen konble)
+    unfulfilled_desires: '',
     major_disappointments: '',
     recent_change: '',
     recent_change_detail: '',
@@ -64,6 +61,24 @@ export default function App() {
     current_resources: '',
     current_vs_usual: ''
   });
+
+  useEffect(() => {
+    const existingSession = localStorage.getItem('fas_active_session');
+    if (existingSession) {
+      try {
+        const parsed = JSON.parse(existingSession);
+        if (parsed.code) {
+          setAccessCode(parsed.code);
+          return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    const newCode = crypto.randomUUID().split('-')[0].toUpperCase();
+    setAccessCode(newCode);
+    localStorage.setItem('fas_active_session', JSON.stringify({ code: newCode }));
+  }, []);
 
   const startAssessment = () => {
     const questions30 = getRandom30Questions(questionsData);
@@ -87,31 +102,34 @@ export default function App() {
     }
   };
 
-// Fonksyon pou voye done epi verifye kòd la ak sèvè Flask la
-  const sendResultsToBackend = async () => {
-    // Netwaye epi prepare kòd ak PIN
+  const handleVerifyAndGenerate = async () => {
     const safeAccessCode = (accessCode || '').trim();
     const safePinCode = (pinCode || '').trim();
 
-    // 1. Validate anvan n voye
     if (!safeAccessCode) {
       alert(lang === 'fr' ? "Veuillez entrer le code d'accès." : "Tanpri antre kòd daksè a.");
       return;
     }
 
-    setBackendLoading(true);
-    setBackendError(null);
+    if (!safePinCode) {
+      alert(lang === 'fr' ? "Veuillez entrer le code PIN." : "Tanpri antre kòd PIN la.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsLoading(true);
+    const scores = calculateBigFiveScores(activeQuestions, userAnswers);
+    setCalculatedScores(scores);
 
     try {
-      // 2. Voye presizeman non kle Flask ap tann yo (input_code ak input_pin)
-      const response = await fetch(`${BACKEND_URL}/api/generate-report`, {
+      const response = await fetch(`${API_URL}/api/generate-report`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input_code: safeAccessCode, // <-- Flask ap tann input_code!
-          input_pin: safePinCode,   // <-- Flask ap tann input_pin!
+          access_code: safeAccessCode,
+          code: safeAccessCode,
+          pin: safePinCode,
+          input_pin: safePinCode,
           scores: scores,
           clinical_context: {
             ...clinicalContext,
@@ -119,115 +137,55 @@ export default function App() {
           },
           type: 'bfi_30',
           lang: lang
-        }),
+        })
       });
+
+      if (response.status === 429) {
+        setErrorMessage(
+          lang === 'fr'
+            ? "Limite quotidienne de tests atteinte (3/3). Réessayez demain."
+            : "Ou rive nan limit tès ou pou jodi a (3/3)."
+        );
+        return;
+      }
 
       const data = await response.json();
 
       if (!response.ok) {
-        // Si gen yon erè nan kòd la oswa PIN nan, afiche mesaj erè sèvè a bay
-        throw new Error(data.error || (lang === 'fr' ? "Code d'accès invalide." : "Kòd daksè a pa bon."));
+        throw new Error(data.error || data.message || (lang === 'fr' ? "Code d'accès ou PIN invalide." : "Kòd daksè a oubyen PIN an pa bon."));
       }
 
-      // Si tout bagay OK, sove rapò a epi lage rezilta yo!
-      setBackendReport(data.report || data);
-      setIsUnlocked(true); // <--- Sa ap debloke rezilta a pou moun lan ka wè l
-    } catch (err) {
-      console.error("Erè backend:", err);
-      setBackendError(err.message);
-      alert(err.message);
+      if (data.crisis) {
+        setCrisisData(data);
+        setStep('crisis');
+        return;
+      }
+
+      if (data.report) {
+        setReportText(data.report);
+        localStorage.removeItem('fas_active_session');
+        setStep('result');
+      }
+
+    } catch (error) {
+      console.error("Backend error:", error);
+      setErrorMessage(error.message || (lang === 'fr' ? "Erreur de connexion." : "Erè nan rekiperasyon rapò a."));
     } finally {
-      setBackendLoading(false);
+      setIsLoading(false);
     }
   };
 
-const handleVerifyAndGenerate = async () => {
-  // On récupère la valeur actuelle du code et du PIN
-  const safeAccessCode = (accessCode || '').trim();
-  const safePinCode = (pinCode || '').trim();
-
-  console.log("--> Envoi vers le backend - Code:", safeAccessCode, "PIN:", safePinCode);
-
-  if (!safeAccessCode) {
-    alert(lang === 'fr' ? "Veuillez entrer le code d'accès." : "Tanpri antre kòd daksè a.");
-    return;
-  }
-
-  if (!safePinCode) {
-    alert(lang === 'fr' ? "Veuillez entrer le code PIN." : "Tanpri antre kòd PIN la.");
-    return;
-  }
-
-  setErrorMessage(null);
-  const scores = calculateBigFiveScores(activeQuestions, userAnswers);
-  setCalculatedScores(scores);
-
-  try {
-    const response = await fetch(`${API_URL}/api/generate-report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        access_code: safeAccessCode, // Clé attendue par app.py
-        code: safeAccessCode,        // Sécurité au cas où
-        pin: safePinCode,            // Clé attendue par app.py
-        input_pin: safePinCode,      // Sécurité au cas où
-        scores: scores,
-        clinical_context: {
-          ...clinicalContext,
-          baseline_period: '2_to_3_years'
-        },
-        type: 'bfi_30',
-        lang: lang
-      })
-    });
-
-    if (response.status === 429) {
-      setErrorMessage(
-        lang === 'fr'
-          ? "Limite quotidienne de tests atteinte (3/3). Réessayez demain."
-          : "Ou rive nan limit tès ou pou jodi a (3/3)."
-      );
-      return;
-    }
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || data.message || (lang === 'fr' ? "Code d'accès ou PIN invalide." : "Kòd daksè a oubyen PIN an pa bon."));
-    }
-
-    if (data.crisis) {
-      setCrisisData(data);
-      setStep('crisis');
-      return;
-    }
-
-    if (data.report) {
-      setReportText(data.report);
-      localStorage.removeItem('fas_active_session');
-      setStep('result');
-    }
-
-  } catch (error) {
-    console.error("Backend error:", error);
-    setErrorMessage(error.message || (lang === 'fr' ? "Erreur de connexion." : "Erè nan rekiperasyon rapò a."));
-  }
-};
   const handleCopyReport = () => {
     navigator.clipboard.writeText(reportText);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   };
 
-const handleReset = () => {
-    // EFASE SESYON AN NAN LOCALSTORAGE POU YON NOUVO KÒD KA JENERE!
+  const handleReset = () => {
     localStorage.removeItem('fas_active_session');
-
-    // Jenere yon nouvo kòd inik pou pwochen moun nan
-   const newCode = crypto.randomUUID().split('-')[0].toUpperCase();
-setAccessCode(newCode);
-
-    if (typeof setPinCode === 'function') setPinCode('');
+    const newCode = crypto.randomUUID().split('-')[0].toUpperCase();
+    setAccessCode(newCode);
+    setPinCode('');
     setUserComment('');
     setErrorMessage(null);
     setCrisisData(null);
@@ -259,6 +217,7 @@ setAccessCode(newCode);
     });
     setStep('welcome');
   };
+
   return (
     <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
       
@@ -513,140 +472,6 @@ setAccessCode(newCode);
                     <option value="exhausting">{lang === 'fr' ? "Épuisant / Source d'anxiété" : "Li fatige m anpil / Li ban m tèt chaje"}</option>
                   </select>
                 </div>
-                 {/* SECTION D : Kontèks Resan & Desepsyon / Fristrasyon */}
-<div className="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-700/80">
-  <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
-    {lang === 'fr' ? "4. Événements récents & Attentes" : "4. Evènman resan ak Sa w t ap tann"}
-  </h3>
-
-  <div>
-    <label className="block text-xs font-semibold text-slate-300 mb-1">
-      {lang === 'fr' 
-        ? "Qu'est-ce qui vous intéressait récemment qui a été (ou n'a pas été) comblé ?" 
-        : "Kisa ki te enterese w nan moman sa yo ke l te konble oubyen li pat konble?"}
-    </label>
-    <textarea
-      rows={2}
-      value={clinicalContext.unfulfilled_desires}
-      onChange={(e) => setClinicalContext({...clinicalContext, unfulfilled_desires: e.target.value})}
-      placeholder={lang === 'fr' ? "Ex: Attente d'une promotion, projet personnel..." : "Eg: M t ap tann yon opòtinite, yon pwojè ki pa mache..."}
-      className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
-    />
-  </div>
-
-  <div>
-    <label className="block text-xs font-semibold text-slate-300 mb-1">
-      {lang === 'fr' 
-        ? "Quel événement ou situation récente vous a démotivé(e) ou marqué(e) négativement ?" 
-        : "Ki pi gwo bagay ki te dekouraje w, demotive w oubyen atire atansyon w de fason negatif?"}
-    </label>
-    <textarea
-      rows={2}
-      value={clinicalContext.major_disappointments}
-      onChange={(e) => setClinicalContext({...clinicalContext, major_disappointments: e.target.value})}
-      placeholder={lang === 'fr' ? "Ex: Conflit, échec récent, perte de confiance..." : "Eg: Yon gwo desepsyon, yon moun ki desevwa m, yon echèk..."}
-      className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
-    />
-  </div>
-</div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {lang === 'fr'
-                        ? "Y a-t-il eu récemment un changement important dans votre vie ?"
-                        : "Èske te gen yon chanjman enpòtan nan lavi w dènyèman?"}
-                    </label>
-                    <select
-                      value={clinicalContext.recent_change}
-                      onChange={(e) => setClinicalContext({...clinicalContext, recent_change: e.target.value})}
-                      className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
-                      <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
-                      <option value="no">{lang === 'fr' ? "Non" : "Non"}</option>
-                      <option value="yes">{lang === 'fr' ? "Oui" : "Wi"}</option>
-                      <option value="unsure">{lang === 'fr' ? "Je ne sais pas / Je préfère ne pas préciser" : "Mwen pa konnen / Mwen prefere pa presize"}</option>
-                    </select>
-                  </div>
-
-                  {clinicalContext.recent_change === 'yes' && (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        {lang === 'fr'
-                          ? "Quel changement a le plus marqué cette période ?"
-                          : "Ki chanjman ki te make peryòd sa a plis?"}
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={clinicalContext.recent_change_detail}
-                        onChange={(e) => setClinicalContext({...clinicalContext, recent_change_detail: e.target.value})}
-                        placeholder={lang === 'fr' ? "Vous pouvez rester général(e)." : "Ou ka rete jeneral si ou vle."}
-                        className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {lang === 'fr'
-                        ? "Qu'est-ce qui vous demande le plus d'énergie actuellement ?"
-                        : "Kisa ki mande plis enèji nan men w kounye a?"}
-                    </label>
-                    <select
-                      value={clinicalContext.current_pressure}
-                      onChange={(e) => setClinicalContext({...clinicalContext, current_pressure: e.target.value})}
-                      className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
-                      <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
-                      <option value="work_studies">{lang === 'fr' ? "Travail / études" : "Travay / lekòl"}</option>
-                      <option value="relationships">{lang === 'fr' ? "Relations" : "Relasyon"}</option>
-                      <option value="family">{lang === 'fr' ? "Famille" : "Fanmi"}</option>
-                      <option value="finances">{lang === 'fr' ? "Finances" : "Finans"}</option>
-                      <option value="health_habits">{lang === 'fr' ? "Santé / habitudes de vie" : "Sante / abitid lavi"}</option>
-                      <option value="future_uncertainty">{lang === 'fr' ? "Incertitude concernant l'avenir" : "Ensètitid sou lavni"}</option>
-                      <option value="multiple">{lang === 'fr' ? "Plusieurs choses à la fois" : "Plizyè bagay an menm tan"}</option>
-                      <option value="other">{lang === 'fr' ? "Autre" : "Lòt"}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {lang === 'fr'
-                        ? "Qu'est-ce qui vous aide habituellement à traverser les périodes difficiles ?"
-                        : "Kisa ki konn ede w pase nan peryòd difisil yo?"}
-                    </label>
-                    <select
-                      value={clinicalContext.current_resources}
-                      onChange={(e) => setClinicalContext({...clinicalContext, current_resources: e.target.value})}
-                      className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
-                      <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
-                      <option value="trusted_person">{lang === 'fr' ? "Une personne de confiance" : "Yon moun mwen fè konfyans"}</option>
-                      <option value="activity_hobby">{lang === 'fr' ? "Une activité / un loisir" : "Yon aktivite / yon distraksyon"}</option>
-                      <option value="work_project">{lang === 'fr' ? "Travail / projet" : "Travay / pwojè"}</option>
-                      <option value="alone_time">{lang === 'fr' ? "Le temps seul" : "Tan mwen pase pou kont mwen"}</option>
-                      <option value="family">{lang === 'fr' ? "Famille" : "Fanmi"}</option>
-                      <option value="routine">{lang === 'fr' ? "Routine" : "Woutin"}</option>
-                      <option value="nothing">{lang === 'fr' ? "Rien de particulier actuellement" : "Pa gen anyen an patikilye kounye a"}</option>
-                      <option value="other">{lang === 'fr' ? "Autre" : "Lòt"}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {lang === 'fr'
-                        ? "Par rapport à votre fonctionnement habituel, avez-vous l'impression d'être différent(e) actuellement ?"
-                        : "Konpare ak jan ou abitye ye, èske ou santi ou diferan kounye a?"}
-                    </label>
-                    <select
-                      value={clinicalContext.current_vs_usual}
-                      onChange={(e) => setClinicalContext({...clinicalContext, current_vs_usual: e.target.value})}
-                      className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
-                      <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
-                      <option value="no">{lang === 'fr' ? "Non, je me reconnais assez bien" : "Non, mwen rekonèt tèt mwen byen"}</option>
-                      <option value="a_little">{lang === 'fr' ? "Un peu différent(e)" : "Yon ti jan diferan"}</option>
-                      <option value="clearly">{lang === 'fr' ? "Nettement différent(e)" : "Mwen santi m diferan anpil"}</option>
-                      <option value="unsure">{lang === 'fr' ? "Je ne sais pas" : "Mwen pa konnen"}</option>
-                    </select>
-                  </div>
-                </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -664,21 +489,154 @@ setAccessCode(newCode);
               </div>
             </div>
 
-           {/* Bouton pou pase nan paj peman an */}
-<button 
-  type="button"
-  onClick={() => {
-    // 1. Générer un code unique (ex: BF-X7K9P2)
-    const generatedCode = "BF-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-    // 2. Sauvegarder ce code dans la variable d'état
-    setAccessCode(generatedCode);
-    // 3. Passer à la page de paiement
-    setStep('paywall');
-  }}
-  className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-600/30 mt-4">
-  {lang === 'fr' ? "Continuer vers mon rapport" : "Kontinye pou w debloke rapò a"}
-</button>
-       
+            {/* SECTION D : Contexte Récent & Attentes */}
+            <div className="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-700/80">
+              <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
+                {lang === 'fr' ? "4. Événements récents & Attentes" : "4. Evènman resan ak Sa w t ap tann"}
+              </h3>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  {lang === 'fr' 
+                    ? "Qu'est-ce qui vous intéressait récemment qui a été (ou n'a pas été) comblé ?" 
+                    : "Kisa ki te enterese w nan moman sa yo ke l te konble oubyen li pat konble?"}
+                </label>
+                <textarea
+                  rows={2}
+                  value={clinicalContext.unfulfilled_desires}
+                  onChange={(e) => setClinicalContext({...clinicalContext, unfulfilled_desires: e.target.value})}
+                  placeholder={lang === 'fr' ? "Ex: Attente d'une promotion, projet personnel..." : "Eg: M t ap tann yon opòtinite, yon pwojè ki pa mache..."}
+                  className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  {lang === 'fr' 
+                    ? "Quel événement ou situation récente vous a démotivé(e) ou marqué(e) négativement ?" 
+                    : "Ki pi gwo bagay ki te dekouraje w, demotive w oubyen atire atansyon w de fason negatif?"}
+                </label>
+                <textarea
+                  rows={2}
+                  value={clinicalContext.major_disappointments}
+                  onChange={(e) => setClinicalContext({...clinicalContext, major_disappointments: e.target.value})}
+                  placeholder={lang === 'fr' ? "Ex: Conflit, échec récent, perte de confiance..." : "Eg: Yon gwo desepsyon, yon moun ki desevwa m, yon echèk..."}
+                  className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {lang === 'fr'
+                      ? "Y a-t-il eu récemment un changement important dans votre vie ?"
+                      : "Èske te gen yon chanjman enpòtan nan lavi w dènyèman?"}
+                  </label>
+                  <select
+                    value={clinicalContext.recent_change}
+                    onChange={(e) => setClinicalContext({...clinicalContext, recent_change: e.target.value})}
+                    className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
+                    <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
+                    <option value="no">{lang === 'fr' ? "Non" : "Non"}</option>
+                    <option value="yes">{lang === 'fr' ? "Oui" : "Wi"}</option>
+                    <option value="unsure">{lang === 'fr' ? "Je ne sais pas / Je préfère ne pas préciser" : "Mwen pa konnen / Mwen prefere pa presize"}</option>
+                  </select>
+                </div>
+
+                {clinicalContext.recent_change === 'yes' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      {lang === 'fr'
+                        ? "Quel changement a le plus marqué cette période ?"
+                        : "Ki chanjman ki te make peryòd sa a plis?"}
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={clinicalContext.recent_change_detail}
+                      onChange={(e) => setClinicalContext({...clinicalContext, recent_change_detail: e.target.value})}
+                      placeholder={lang === 'fr' ? "Vous pouvez rester général(e)." : "Ou ka rete jeneral si ou vle."}
+                      className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {lang === 'fr'
+                      ? "Qu'est-ce qui vous demande le plus d'énergie actuellement ?"
+                      : "Kisa ki mande plis enèji nan men w kounye a?"}
+                  </label>
+                  <select
+                    value={clinicalContext.current_pressure}
+                    onChange={(e) => setClinicalContext({...clinicalContext, current_pressure: e.target.value})}
+                    className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
+                    <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
+                    <option value="work_studies">{lang === 'fr' ? "Travail / études" : "Travay / lekòl"}</option>
+                    <option value="relationships">{lang === 'fr' ? "Relations" : "Relasyon"}</option>
+                    <option value="family">{lang === 'fr' ? "Famille" : "Fanmi"}</option>
+                    <option value="finances">{lang === 'fr' ? "Finances" : "Finans"}</option>
+                    <option value="health_habits">{lang === 'fr' ? "Santé / habitudes de vie" : "Sante / abitid lavi"}</option>
+                    <option value="future_uncertainty">{lang === 'fr' ? "Incertitude concernant l'avenir" : "Ensètitid sou lavni"}</option>
+                    <option value="multiple">{lang === 'fr' ? "Plusieurs choses à la fois" : "Plizyè bagay an menm tan"}</option>
+                    <option value="other">{lang === 'fr' ? "Autre" : "Lòt"}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {lang === 'fr'
+                      ? "Qu'est-ce qui vous aide habituellement à traverser les périodes difficiles ?"
+                      : "Kisa ki konn ede w pase nan peryòd difisil yo?"}
+                  </label>
+                  <select
+                    value={clinicalContext.current_resources}
+                    onChange={(e) => setClinicalContext({...clinicalContext, current_resources: e.target.value})}
+                    className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
+                    <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
+                    <option value="trusted_person">{lang === 'fr' ? "Une personne de confiance" : "Yon moun mwen fè konfyans"}</option>
+                    <option value="activity_hobby">{lang === 'fr' ? "Une activité / un loisir" : "Yon aktivite / yon distraksyon"}</option>
+                    <option value="work_project">{lang === 'fr' ? "Travail / projet" : "Travay / pwojè"}</option>
+                    <option value="alone_time">{lang === 'fr' ? "Le temps seul" : "Tan mwen pase pou kont mwen"}</option>
+                    <option value="family">{lang === 'fr' ? "Famille" : "Fanmi"}</option>
+                    <option value="routine">{lang === 'fr' ? "Routine" : "Woutin"}</option>
+                    <option value="nothing">{lang === 'fr' ? "Rien de particulier actuellement" : "Pa gen anyen an patikilye kounye a"}</option>
+                    <option value="other">{lang === 'fr' ? "Autre" : "Lòt"}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    {lang === 'fr'
+                      ? "Par rapport à votre fonctionnement habituel, avez-vous l'impression d'être différent(e) actuellement ?"
+                      : "Konpare ak jan ou abitye ye, èske ou santi ou diferan kounye a?"}
+                  </label>
+                  <select
+                    value={clinicalContext.current_vs_usual}
+                    onChange={(e) => setClinicalContext({...clinicalContext, current_vs_usual: e.target.value})}
+                    className="w-full bg-slate-800 text-slate-100 p-2.5 rounded-lg border border-slate-700 text-xs focus:outline-none focus:border-indigo-500">
+                    <option value="">{lang === 'fr' ? "Sélectionner..." : "Chwazi..."}</option>
+                    <option value="no">{lang === 'fr' ? "Non, je me reconnais assez bien" : "Non, mwen rekonèt tèt mwen byen"}</option>
+                    <option value="a_little">{lang === 'fr' ? "Un peu différent(e)" : "Yon ti jan diferan"}</option>
+                    <option value="clearly">{lang === 'fr' ? "Nettement différent(e)" : "Mwen santi m diferan anpil"}</option>
+                    <option value="unsure">{lang === 'fr' ? "Je ne sais pas" : "Mwen pa konnen"}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Bouton pou pase nan paj peman an */}
+            <button 
+              type="button"
+              onClick={() => {
+                const generatedCode = "BF-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                setAccessCode(generatedCode);
+                setStep('paywall');
+              }}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-600/30 mt-4">
+              {lang === 'fr' ? "Continuer vers mon rapport" : "Kontinye pou w debloke rapò a"}
+            </button>
+          </div>
+        )}
 
         {/* 4. Paywall (Paj Peman ak Kòd Aksè) */}
         {step === 'paywall' && (
@@ -710,49 +668,74 @@ setAccessCode(newCode);
               </p>
             </div>
 
-           <div className="space-y-3">
-             {/* Chan 1: Code d'accès (Otomatik & Inik pou aparèy sa a) */}
-<div>
-  <label className="block text-xs font-medium text-slate-400 mb-1">
-    {lang === 'fr' ? "Votre Code d'accès unique" : "Kòd daksè inik ou an"}
-  </label>
-  <div className="flex gap-2">
-    <input
-      type="text"
-      value={accessCode}
-      readOnly
-      className="w-full bg-slate-900 text-indigo-400 p-3 rounded-xl border border-indigo-500/50 text-sm font-mono font-bold tracking-wider uppercase cursor-not-allowed"
-    />
-    <button
-      type="button"
-      onClick={() => navigator.clipboard.writeText(accessCode)}
-      className="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 transition"
-      title={lang === 'fr' ? "Copier le code" : "Kopie kòd la"}
-    >
-      📋
-    </button>
-  </div>
-  <p className="text-[11px] text-slate-400 mt-1">
-    {lang === 'fr' 
-      ? "👉 Envoyez ce code sur WhatsApp pour recevoir votre PIN de confirmation." 
-      : "👉 Voye kòd sa a sou WhatsApp pou w ka resevwa PIN konfimasyon w lan."}
-  </p>
-</div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  {lang === 'fr' ? "Votre Code d'accès unique" : "Kòd daksè inik ou an"}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={accessCode}
+                    readOnly
+                    className="w-full bg-slate-900 text-indigo-400 p-3 rounded-xl border border-indigo-500/50 text-sm font-mono font-bold tracking-wider uppercase cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(accessCode)}
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 transition"
+                    title={lang === 'fr' ? "Copier le code" : "Kopie kòd la"}
+                  >
+                    📋
+                  </button>
+                </div>
+              </div>
 
-{/* Chan 2: Code PIN (Moun nan ap rantre PIN ou ba li a) */}
-<div className="mt-4">
-  <label className="block text-xs font-medium text-slate-400 mb-1">
-    {lang === 'fr' ? "Code PIN de confirmation" : "Kòd PIN konfimasyon"}
-  </label>
-  <input
-    type="text"
-    value={pinCode}
-    onChange={(e) => setPinCode(e.target.value.toUpperCase())}
-    placeholder={lang === 'fr' ? "Entrez le PIN reçu (Ex: 8A3F91)" : "Antre PIN ou resevwa a (Eg: 8A3F91)"}
-    className="w-full bg-slate-800 text-white p-3 rounded-xl border border-indigo-500/50 text-sm font-mono tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
-  />
-</div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {lang === 'fr' 
+                  ? "👉 Envoyez ce code sur WhatsApp pour recevoir votre PIN de confirmation." 
+                  : "👉 Voye kòd sa a sou WhatsApp pou w ka resevwa PIN konfimasyon w lan."}
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setStep('pin')}
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg transition"
+              >
+                {lang === 'fr' ? "J'ai payé et j'attends mon PIN" : "Mwen peye epi m ap tann PIN mwen"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStep('clinical_questions')}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                {lang === 'fr' ? "Retour" : "Retounen"}
+              </button>
             </div>
+          </div>
+        )}
+
+        {/* 4.5. PIN Step */}
+        {step === 'pin' && (
+          <div className="max-w-xl mx-auto bg-slate-900/95 border border-indigo-500/30 p-6 rounded-2xl shadow-2xl space-y-4">
+            <h2 className="text-xl font-bold text-white">
+              {lang === 'fr' ? "Validation du code PIN" : "Validasyon kòd PIN"}
+            </h2>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">
+                {lang === 'fr' ? "Code PIN de confirmation" : "Kòd PIN konfimasyon"}
+              </label>
+              <input
+                type="text"
+                value={pinCode}
+                onChange={(e) => setPinCode(e.target.value.toUpperCase())}
+                placeholder={lang === 'fr' ? "Entrez le PIN reçu (Ex: 8A3F91)" : "Antre PIN ou resevwa a (Eg: 8A3F91)"}
+                className="w-full bg-slate-800 text-white p-3 rounded-xl border border-indigo-500/50 text-sm font-mono tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
             {errorMessage && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs text-center">
                 {errorMessage}
@@ -762,30 +745,30 @@ setAccessCode(newCode);
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setStep('clinical_questions')}
+                onClick={() => setStep('paywall')}
                 className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
               >
                 {lang === 'fr' ? "Retour" : "Retounen"}
               </button>
-             <button
-  type="button"
-  onClick={handleVerifyAndGenerate}
-  disabled={isLoading || !pinCode}
-  className={`w-full py-3.5 rounded-xl text-xs font-bold shadow-lg transition flex items-center justify-center gap-2 ${
-    isLoading || !pinCode
-      ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
-      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
-  }`}
->
-  {isLoading ? (
-    <>
-      <span className="animate-spin">⏳</span>
-      {lang === 'fr' ? "Génération en cours..." : "M ap jenere rapò a..."}
-    </>
-  ) : (
-    lang === 'fr' ? "Générer mon rapport" : "Jenere rapò mwen an"
-  )}
-</button>
+              <button
+                type="button"
+                onClick={handleVerifyAndGenerate}
+                disabled={isLoading || !pinCode}
+                className={`w-full py-3.5 rounded-xl text-xs font-bold shadow-lg transition flex items-center justify-center gap-2 ${
+                  isLoading || !pinCode
+                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+                }`}
+              >
+                {isLoading ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    {lang === 'fr' ? "Génération en cours..." : "M ap jenere rapò a..."}
+                  </>
+                ) : (
+                  lang === 'fr' ? "Générer mon rapport" : "Jenere rapò mwen an"
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -840,7 +823,6 @@ setAccessCode(newCode);
             </button>
           </div>
         )}
-        
 
         {/* 7. Results */}
         {step === 'result' && (
@@ -893,7 +875,7 @@ setAccessCode(newCode);
               </button>
             </div>
 
-           {/* Markdown Report View */}
+            {/* Markdown Report View */}
             {reportText ? (
               <div className="bg-slate-900 p-6 rounded-xl text-slate-200 text-sm max-h-[500px] overflow-y-auto mb-6 border border-slate-700">
                 <ReactMarkdown 
@@ -930,5 +912,3 @@ setAccessCode(newCode);
     </div>
   );
 }
-
-export default App;

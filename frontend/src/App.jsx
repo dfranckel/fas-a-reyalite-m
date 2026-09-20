@@ -893,7 +893,7 @@ setAccessCode(newCode);
               </button>
             </div>
 
-            {/* Markdown Report View */}
+           {/* Markdown Report View */}
             {reportText ? (
               <div className="bg-slate-900 p-6 rounded-xl text-slate-200 text-sm max-h-[500px] overflow-y-auto mb-6 border border-slate-700">
                 <ReactMarkdown 
@@ -925,42 +925,10 @@ setAccessCode(newCode);
             </button>
           </div>
         )}
-      {/* Si kòd la poko debloke (isUnlocked === false), afiche Paywall la */}
-{!isUnlocked ? (
-  <div className="paywall-container">
-    <p className="text-red-500 font-bold">{backendError}</p>
-    
-    <input 
-      type="text" 
-      placeholder="Code d'accès" 
-      value={accessCode} 
-      onChange={(e) => setAccessCode(e.target.value)} 
-    />
-    
-    <input 
-      type="text" 
-      placeholder="Code PIN (si requis)" 
-      value={pinCode} 
-      onChange={(e) => setPinCode(e.target.value)} 
-    />
-
-    <button 
-      onClick={handleVerifyAndGenerate}
-      disabled={backendLoading}
-      className="bg-blue-600 text-white px-4 py-2 rounded mt-2"
-    >
-      {backendLoading ? "Vérification..." : "Générer mon rapport"}
-    </button>
-  </div>
-) : (
-  /* Lè kòd la bon epi isUnlocked === true, se lè sa a pou l afiche rezilta yo ak rapò a */
-  <div className="results-container">
-    <h2>Votre Rapport Clinique Complexe</h2>
-    <div>{backendReport}</div>
-  </div>
-)}
 
       </div>
     </div>
   );
 }
+
+export default App;

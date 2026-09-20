@@ -664,15 +664,20 @@ setAccessCode(newCode);
               </div>
             </div>
 
-            {/* Bouton pou pase nan paj peman an */}
-            <button 
-              type="button"
-              onClick={() => setStep('paywall')}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-600/30 mt-4">
-              {lang === 'fr' ? "Continuer vers mon rapport" : "Kontinye pou w debloke rapò a"}
-            </button>
-          </div>
-        )}
+           {/* Bouton pou pase nan paj peman an */}
+<button 
+  type="button"
+  onClick={() => {
+    // 1. Générer un code unique (ex: BF-X7K9P2)
+    const generatedCode = "BF-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    // 2. Sauvegarder ce code dans la variable d'état
+    setAccessCode(generatedCode);
+    // 3. Passer à la page de paiement
+    setStep('paywall');
+  }}
+  className="w-full bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl font-bold transition text-sm shadow-lg shadow-indigo-600/30 mt-4">
+  {lang === 'fr' ? "Continuer vers mon rapport" : "Kontinye pou w debloke rapò a"}
+</button>
        
 
         {/* 4. Paywall (Paj Peman ak Kòd Aksè) */}
